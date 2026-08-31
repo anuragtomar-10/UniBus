@@ -1,0 +1,229 @@
+// UniBus Prisma Schema
+// PostgreSQL chosen over MongoDB/MySQL:
+//   - ACID transactions required for booking (hold → confirm as atomic unit)
+//   - Deep relational joins: User → Booking → Seat → Trip → Route
+//   - Row-level pessimistic locking (SELECT ... FOR UPDATE) — not available cleanly in document DBs
+//   - Native JSONB (used for AuditLog.metadata and Recommendation.evidence)
+//   - Stricter typing than MySQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum Destination {
+  COLLEGE
+  RAJA_PARK
+  AJMERI_GATE
+}
+
+enum SeatStatus {
+  AVAILABLE
+  HELD
+  BOOKED
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+enum TripSource {
+  BASE
+  SPECIAL
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(STUDENT)
+  createdAt     DateTime       @default(now())
+  refreshTokens RefreshToken[]
+  bookings      Booking[]
+
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Driver: plain DB record only — no login, no auth flow.
+// Exists purely to be referenced by trips for operational tracking.
+model Driver {
+  id        String             @id @default(uuid())
+  name      String
+  licenseNo String             @unique
+  phone     String
+  baseTrips BaseScheduleTrip[]
+  trips     Trip[]
+}
+
+// Bus: every bus has exactly 60 seats (10 rows × 6 seats A–F).
+// totalSeats stored here so future bus types with different capacities can be added
+// without schema changes to Seat generation logic.
+model Bus {
+  id             String             @id @default(uuid())
+  registrationNo String             @unique
+  totalSeats     Int                @default(60) // fixed: 10 rows × 6 seats (A–F), identical for every bus
+  baseTrips      BaseScheduleTrip[]
+  trips          Trip[]
+}
+
+// BaseScheduleTrip: the admin's weekly template.
+// STRUCTURALLY SEPARATE from Trip — this separation is the schema-level guarantee
+// that a refresh operation is architecturally incapable of mutating the template.
+// Editing this table affects future refreshes only, never already-generated Trip rows.
+model BaseScheduleTrip {
+  id            String      @id @default(uuid())
+  dayOfWeek     Int // 1=Mon ... 6=Sat (Sunday excluded — the off/refresh day)
+  origin        Destination
+  destination   Destination
+  departureTime String // "HH:mm"
+  busId         String
+  bus           Bus         @relation(fields: [busId], references: [id])
+  driverId      String
+  driver        Driver      @relation(fields: [driverId], references: [id])
+  isActive      Boolean     @default(true)
+
+  // Prevent same bus/driver being assigned twice on same day in the base template
+  @@unique([dayOfWeek, busId])
+  @@unique([dayOfWeek, driverId])
+}
+
+// Trip: actual bookable trips generated from the base template (source: BASE)
+// or created manually by admin (source: SPECIAL).
+// @@unique constraints are the final backstop for NFR1 and EC3 — even if app-level
+// checks are bypassed, the DB will reject a double-booking.
+model Trip {
+  id                 String      @id @default(uuid())
+  date               DateTime
+  origin             Destination
+  destination        Destination
+  departureTime      String // "HH:mm"
+  busId              String
+  bus                Bus         @relation(fields: [busId], references: [id])
+  driverId           String
+  driver             Driver      @relation(fields: [driverId], references: [id])
+  source             TripSource
+  baseScheduleTripId String? // null for SPECIAL trips
+  createdAt          DateTime    @default(now())
+  seats              Seat[]
+
+  // NFR1/EC3: physically impossible to double-book same bus or driver at same date+time
+  @@unique([busId, date, departureTime])
+  @@unique([driverId, date, departureTime])
+  // FR10: optimised for search by date+destination
+  @@index([date, destination])
+}
+
+// Seat: one row per physical seat per trip.
+// @@unique([tripId, seatNumber]) ensures no duplicate seats within a trip.
+model Seat {
+  id         String     @id @default(uuid())
+  tripId     String
+  trip       Trip       @relation(fields: [tripId], references: [id])
+  seatNumber String // "1A".."10F"
+  status     SeatStatus @default(AVAILABLE)
+  booking    Booking?
+
+  @@unique([tripId, seatNumber])
+}
+
+// Booking: one confirmed (or cancelled) booking per seat ever.
+// @@unique(seatId) enforces one booking per seat at the DB level.
+// @@unique(idempotencyKey) prevents double-charge on network retry (NFR4, EC7).
+model Booking {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  seatId         String        @unique
+  seat           Seat          @relation(fields: [seatId], references: [id])
+  status         BookingStatus @default(CONFIRMED)
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
+  cancelledAt    DateTime?
+  payment        Payment?
+
+  // NFR11: composite index backing the 30-day history query (FR18)
+  @@index([userId, createdAt])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  amount    Decimal
+  status    String
+  createdAt DateTime @default(now())
+}
+
+// AuditLog: append-only, never updated. Every state-changing action is recorded here.
+// HOLD_FAILED entries are the key signal for demand that was turned away (vs. merely met).
+// This distinction drives the contention metric in the analytics agent.
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String // HOLD_SUCCESS | HOLD_FAILED | PAYMENT_SUCCESS | PAYMENT_FAILED | CANCELLED
+  userId    String?
+  seatId    String?
+  bookingId String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+}
+
+model EmailLog {
+  id      String   @id @default(uuid())
+  to      String
+  subject String
+  body    String
+  sentAt  DateTime @default(now())
+}
+
+// Recommendation: output of the analytics agent.
+// evidence (Json, mandatory) stores the actual numbers the model cited.
+// Why evidence is required and non-optional:
+//   - Without stored numbers, a recommendation is just an LLM opinion the admin has to trust blindly
+//   - Storing evidence means the admin can verify it at a glance
+//   - It makes the agent's reasoning auditable after the fact
+//   - It gives a natural "why did it say that" answer
+// status exists for a future feedback loop: dismissal rate per type could suppress low-value categories.
+model Recommendation {
+  id              String      @id @default(uuid())
+  origin          Destination
+  destination     Destination
+  dayOfWeek       Int? // 1=Mon..6=Sat, null if not day-specific
+  departureTime   String? // "HH:mm", null if not time-specific
+  evidence        Json // mandatory — validated server-side before any row is written (NFR14)
+  suggestedAction String // The enum value from the agent
+  tripType        String      @default("BASE")
+  status          String      @default("PENDING") // PENDING | ACCEPTED | DISMISSED
+  createdAt       DateTime    @default(now())
+  reviewedAt      DateTime?
+
+  @@index([status, createdAt])
+}
