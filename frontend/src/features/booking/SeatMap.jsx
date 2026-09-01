@@ -95,7 +95,7 @@ export function SeatMap() {
         <div style={{ color: "var(--color-text-sub)", fontSize: 13, marginTop: 6, display: "flex", gap: 20 }}>
           <span>🕒 {trip?.departureTime}</span>
           <span>📅 {trip?.date ? new Date(trip.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : ""}</span>
-          <span>🚌 Bus #{trip?.bus?.busNumber}</span>
+          <span>🚌 {trip?.bus?.registrationNo}</span>
         </div>
       </div>
 

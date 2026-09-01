@@ -42,9 +42,13 @@ export function BookingHistory() {
         <div style={{ display: "grid", gap: 12 }}>
           {bookings.map((b) => {
             const trip = b.seat?.trip;
-            const isPast = trip
-              ? new Date(`${trip.date}T${trip.departureTime}`) < new Date()
-              : false;
+            const isPast = (() => {
+              if (!trip) return false;
+              const tripDate = new Date(trip.date);
+              const [h, m] = (trip.departureTime || "00:00").split(":").map(Number);
+              tripDate.setHours(h, m, 0, 0);
+              return tripDate < new Date();
+            })();
             return (
               <div key={b.id} className="glass" style={{ padding: "18px 22px" }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>

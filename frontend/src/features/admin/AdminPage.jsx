@@ -8,7 +8,7 @@ import { Spinner } from "../../components/Spinner";
 function BaseScheduleEditor() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
-    origin: "", destination: "", departureTime: "", daysOfWeek: [],
+    origin: "", destination: "", departureTime: "", daysOfWeek: [], busId: "", driverId: "",
   });
   const [showForm, setShowForm] = useState(false);
 
@@ -17,12 +17,27 @@ function BaseScheduleEditor() {
     queryFn: () => api.get("/admin/schedule/base").then((r) => r.data.trips),
   });
 
+  const { data: buses } = useQuery({
+    queryKey: ["buses"],
+    queryFn: () => api.get("/admin/buses").then((r) => r.data.buses),
+  });
+
+  const { data: drivers } = useQuery({
+    queryKey: ["drivers"],
+    queryFn: () => api.get("/admin/drivers").then((r) => r.data.drivers),
+  });
+
   const createMutation = useMutation({
-    mutationFn: (data) => api.post("/admin/schedule/base", data),
+    mutationFn: async (formData) => {
+      const { daysOfWeek, ...rest } = formData;
+      for (const dayOfWeek of daysOfWeek) {
+        await api.post("/admin/schedule/base", { ...rest, dayOfWeek });
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["base-trips"] });
       setShowForm(false);
-      setForm({ origin: "", destination: "", departureTime: "", daysOfWeek: [] });
+      setForm({ origin: "", destination: "", departureTime: "", daysOfWeek: [], busId: "", driverId: "" });
     },
   });
 
@@ -36,6 +51,7 @@ function BaseScheduleEditor() {
   });
 
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const DESTINATIONS = ["COLLEGE", "RAJA_PARK", "AJMERI_GATE"];
 
   function toggleDay(d) {
     setForm((f) => ({
@@ -73,9 +89,25 @@ function BaseScheduleEditor() {
       {showForm && (
         <div className="glass-sm" style={{ padding: 20, marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-            <input id="base-origin" className="input" placeholder="Origin" value={form.origin} onChange={(e) => setForm((f) => ({ ...f, origin: e.target.value }))} style={{ flex: "1 1 150px" }} />
-            <input id="base-dest" className="input" placeholder="Destination" value={form.destination} onChange={(e) => setForm((f) => ({ ...f, destination: e.target.value }))} style={{ flex: "1 1 150px" }} />
+            <select id="base-origin" className="input" value={form.origin} onChange={(e) => setForm((f) => ({ ...f, origin: e.target.value }))} style={{ flex: "1 1 150px" }}>
+              <option value="">Origin</option>
+              {DESTINATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select id="base-dest" className="input" value={form.destination} onChange={(e) => setForm((f) => ({ ...f, destination: e.target.value }))} style={{ flex: "1 1 150px" }}>
+              <option value="">Destination</option>
+              {DESTINATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
             <input id="base-time" className="input" type="time" value={form.departureTime} onChange={(e) => setForm((f) => ({ ...f, departureTime: e.target.value }))} style={{ flex: "0 0 120px" }} />
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+            <select id="base-bus" className="input" value={form.busId} onChange={(e) => setForm((f) => ({ ...f, busId: e.target.value }))} style={{ flex: "1 1 180px" }}>
+              <option value="">Select bus</option>
+              {(buses || []).map((b) => <option key={b.id} value={b.id}>{b.registrationNo}</option>)}
+            </select>
+            <select id="base-driver" className="input" value={form.driverId} onChange={(e) => setForm((f) => ({ ...f, driverId: e.target.value }))} style={{ flex: "1 1 180px" }}>
+              <option value="">Select driver</option>
+              {(drivers || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
             {dayLabels.map((d, i) => (
@@ -94,7 +126,7 @@ function BaseScheduleEditor() {
             id="save-base-trip"
             className="btn btn-primary"
             onClick={() => createMutation.mutate(form)}
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || !form.origin || !form.destination || !form.departureTime || !form.busId || !form.driverId || form.daysOfWeek.length === 0}
           >
             {createMutation.isPending ? <Spinner size={14} /> : "Save"}
           </button>
@@ -108,7 +140,9 @@ function BaseScheduleEditor() {
               <div>
                 <span style={{ fontWeight: 600 }}>{b.origin} → {b.destination}</span>
                 <span style={{ color: "var(--color-text-sub)", fontSize: 12, marginLeft: 14 }}>
-                  {b.departureTime} · Days: {(b.daysOfWeek || []).join(",")}
+                  {b.departureTime} · {dayLabels[b.dayOfWeek - 1] || `Day ${b.dayOfWeek}`}
+                  {b.bus && <span style={{ marginLeft: 8 }}>🚌 {b.bus.registrationNo}</span>}
+                  {b.driver && <span style={{ marginLeft: 8 }}>👤 {b.driver.name}</span>}
                 </span>
               </div>
               <button
@@ -134,6 +168,18 @@ function SpecialTripForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const DESTINATIONS = ["COLLEGE", "RAJA_PARK", "AJMERI_GATE"];
+
+  const { data: buses } = useQuery({
+    queryKey: ["buses"],
+    queryFn: () => api.get("/admin/buses").then((r) => r.data.buses),
+  });
+
+  const { data: drivers } = useQuery({
+    queryKey: ["drivers"],
+    queryFn: () => api.get("/admin/drivers").then((r) => r.data.drivers),
+  });
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError(""); setResult(null); setLoading(true);
@@ -152,18 +198,30 @@ function SpecialTripForm() {
       <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Create special trip</h2>
       <div className="glass-sm" style={{ padding: 20 }}>
         <form id="special-trip-form" onSubmit={handleSubmit} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <input id="sp-origin" className="input" placeholder="Origin" value={form.origin} onChange={(e) => setForm((f) => ({ ...f, origin: e.target.value }))} style={{ flex: "1 1 130px" }} required />
-          <input id="sp-dest" className="input" placeholder="Destination" value={form.destination} onChange={(e) => setForm((f) => ({ ...f, destination: e.target.value }))} style={{ flex: "1 1 130px" }} required />
+          <select id="sp-origin" className="input" value={form.origin} onChange={(e) => setForm((f) => ({ ...f, origin: e.target.value }))} style={{ flex: "1 1 130px" }} required>
+            <option value="">Origin</option>
+            {DESTINATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <select id="sp-dest" className="input" value={form.destination} onChange={(e) => setForm((f) => ({ ...f, destination: e.target.value }))} style={{ flex: "1 1 130px" }} required>
+            <option value="">Destination</option>
+            {DESTINATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
           <input id="sp-time" className="input" type="time" value={form.departureTime} onChange={(e) => setForm((f) => ({ ...f, departureTime: e.target.value }))} style={{ flex: "0 0 110px" }} required />
           <input id="sp-date" className="input" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} style={{ flex: "0 0 140px" }} required />
-          <input id="sp-bus" className="input" placeholder="Bus ID" value={form.busId} onChange={(e) => setForm((f) => ({ ...f, busId: e.target.value }))} style={{ flex: "1 1 150px" }} required />
-          <input id="sp-driver" className="input" placeholder="Driver ID" value={form.driverId} onChange={(e) => setForm((f) => ({ ...f, driverId: e.target.value }))} style={{ flex: "1 1 150px" }} required />
+          <select id="sp-bus" className="input" value={form.busId} onChange={(e) => setForm((f) => ({ ...f, busId: e.target.value }))} style={{ flex: "1 1 150px" }} required>
+            <option value="">Select bus</option>
+            {(buses || []).map((b) => <option key={b.id} value={b.id}>{b.registrationNo}</option>)}
+          </select>
+          <select id="sp-driver" className="input" value={form.driverId} onChange={(e) => setForm((f) => ({ ...f, driverId: e.target.value }))} style={{ flex: "1 1 150px" }} required>
+            <option value="">Select driver</option>
+            {(drivers || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
           <button id="create-special-trip" type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? <Spinner size={14} /> : "Create"}
           </button>
         </form>
         {error && <p style={{ color: "var(--color-danger)", fontSize: 13, marginTop: 10 }}>{error}</p>}
-        {result && <p style={{ color: "var(--color-success)", fontSize: 13, marginTop: 10 }}>✅ Special trip created: {result.id?.slice(0, 8)}</p>}
+        {result && <p style={{ color: "var(--color-success)", fontSize: 13, marginTop: 10 }}>✅ Special trip created: {result.trip?.id?.slice(0, 8)}</p>}
       </div>
     </section>
   );
@@ -177,7 +235,7 @@ function AuditLookup() {
 
   const { data: logs, isFetching, error } = useQuery({
     queryKey: ["audit", bookingId],
-    queryFn: () => api.get(`/admin/audit/${bookingId}`).then((r) => r.data),
+    queryFn: () => api.get(`/admin/audit/${bookingId}`).then((r) => r.data.logs),
     enabled: submitted && !!bookingId,
     staleTime: 0,
   });

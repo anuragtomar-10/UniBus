@@ -45,6 +45,12 @@ async function holdSeat(tripId, seatNumber, userId) {
     throw err;
   }
 
+  if (seat.status !== "AVAILABLE") {
+    const err = new Error("Seat is already held or booked");
+    err.status = 409;
+    throw err;
+  }
+
   const redisKey = `seat:${tripId}:${seatNumber}`;
 
   // NFR2: Run Lua script — atomic check-and-set (see holdSeat.lua for rationale)

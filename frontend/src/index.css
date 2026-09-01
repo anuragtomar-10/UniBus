@@ -202,6 +202,7 @@
   border: 1px solid rgba(107, 114, 128, 0.25);
 }
 
+.badge-confirmed,
 .badge-booked {
   background: rgba(34, 211, 163, 0.15);
   color: var(--color-success);

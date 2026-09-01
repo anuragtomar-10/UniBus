@@ -74,7 +74,7 @@ function TripCard({ trip }) {
           )}
         </div>
         <div style={{ fontSize: 12, color: "var(--color-text-sub)" }}>
-          🚌 Bus #{trip.bus?.busNumber}
+          🚌 {trip.bus?.registrationNo}
           {trip.driver?.name && (
             <span style={{ marginLeft: 10 }}>👤 {trip.driver.name}</span>
           )}

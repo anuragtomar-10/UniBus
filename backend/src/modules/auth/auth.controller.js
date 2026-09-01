@@ -7,7 +7,8 @@ async function register(req, res, next) {
       return res.status(400).json({ error: "name, email, password required" });
     }
     const user = await authService.register({ name, email, password, role });
-    res.status(201).json({ user });
+    const result = await authService.login({ email, password });
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }

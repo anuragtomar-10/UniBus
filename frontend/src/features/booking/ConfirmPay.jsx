@@ -95,7 +95,7 @@ export function ConfirmPay({ tripId, seatId, seatNumber, holdExpiresAt, onClose 
           maxLength={4}
           pattern="\d{4}"
           value={cardLast4}
-          onChange={(e) => setCardLast4(e.target.value.replace(/\D/, ""))}
+          onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, ""))}
           required
           autoFocus
           style={{ marginBottom: 16, letterSpacing: "0.3em", fontSize: 18, textAlign: "center" }}
