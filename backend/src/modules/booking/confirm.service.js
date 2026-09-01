@@ -145,6 +145,7 @@ async function confirmBooking({ seatId, userId, idempotencyKey, cardLast4, amoun
   // ── Handle Payment Failure Cleanup ──────────────────────────────────────
   if (booking && booking.isPaymentFailure) {
     redis.del(redisKey).catch((e) => console.error("Redis del failed:", e.message));
+    redis.del(`user_hold_trip:${seat.trip.id}:${userId}`).catch((e) => console.error("Redis user hold del failed:", e.message));
     emitSeatReleased(seat.trip.id, seat.seatNumber);
     const err = new Error(`Payment declined: ${booking.reason}`);
     err.status = 402;
@@ -157,6 +158,7 @@ async function confirmBooking({ seatId, userId, idempotencyKey, cardLast4, amoun
 
   // Delete Redis hold key
   redis.del(redisKey).catch((e) => console.error("Redis del failed:", e.message));
+  redis.del(`user_hold_trip:${booking.seat.trip.id}:${userId}`).catch((e) => console.error("Redis user hold del failed:", e.message));
 
   // Emit seat:booked to all clients in the trip room
   emitSeatBooked(booking.seat.trip.id, booking.seat.seatNumber);

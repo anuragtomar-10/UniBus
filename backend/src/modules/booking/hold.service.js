@@ -34,6 +34,21 @@ const luaScript = fs.readFileSync(
  * @returns {{ seatId, holdExpiresAt }}
  */
 async function holdSeat(tripId, seatNumber, userId) {
+  // Check if user already booked a seat for this trip
+  const existingBooking = await prisma.booking.findFirst({
+    where: {
+      userId,
+      status: "CONFIRMED",
+      seat: { tripId }
+    }
+  });
+
+  if (existingBooking) {
+    const err = new Error("You already have a booked seat for this trip");
+    err.status = 409;
+    throw err;
+  }
+
   // Find the seat record first (need seatId for AuditLog)
   const seat = await prisma.seat.findUnique({
     where: { tripId_seatNumber: { tripId, seatNumber } },
@@ -52,9 +67,10 @@ async function holdSeat(tripId, seatNumber, userId) {
   }
 
   const redisKey = `seat:${tripId}:${seatNumber}`;
+  const userHoldKey = `user_hold_trip:${tripId}:${userId}`;
 
   // NFR2: Run Lua script — atomic check-and-set (see holdSeat.lua for rationale)
-  const result = await redis.eval(luaScript, 1, redisKey, userId, HOLD_TTL_SECONDS);
+  const result = await redis.eval(luaScript, 2, redisKey, userHoldKey, userId, HOLD_TTL_SECONDS);
 
   if (result === 0) {
     // EC11: HOLD_FAILED logged even when lost — distinguishes "tried and lost" from "never tried"
@@ -86,10 +102,12 @@ async function holdSeat(tripId, seatNumber, userId) {
  */
 async function releaseSeat(tripId, seatNumber, userId) {
   const redisKey = `seat:${tripId}:${seatNumber}`;
+  const userHoldKey = `user_hold_trip:${tripId}:${userId}`;
   const owner = await redis.get(redisKey);
   if (owner !== userId) return; // not theirs to release
   
   await redis.del(redisKey);
+  await redis.del(userHoldKey);
   
   const { emitSeatReleased } = require("../../sockets/emitters");
   emitSeatReleased(tripId, seatNumber);
