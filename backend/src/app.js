@@ -19,9 +19,11 @@ const analyticsRoutes = require("./modules/analytics/analytics.routes");
 const app = express(); // Express Application Instance : used to define REST routes, middlewares, etc.
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
+// Strip trailing slash — browser origin never includes one, and CORS requires exact match
+const allowedOrigin = frontendUrl.replace(/\/+$/, "");
 app.use(
   cors({
-    origin: frontendUrl,
+    origin: allowedOrigin,
     credentials: true,
   })
 );

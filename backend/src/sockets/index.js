@@ -16,9 +16,10 @@ const { frontendUrl } = require("../config/env");
 let io;
 
 function initSocket(server) {
+  const allowedOrigin = frontendUrl.replace(/\/+$/, "");
   io = new Server(server, {
     cors: {
-      origin: frontendUrl,
+      origin: allowedOrigin,
       methods: ["GET", "POST"],
     },
   });
