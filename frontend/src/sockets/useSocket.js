@@ -15,8 +15,9 @@ export function useSocket(tripId, onSeatEvent) {
     if (!tripId) return;
 
     if (!globalSocket) {
-      globalSocket = io(window.location.origin, {
-        transports: ["websocket"],
+      const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
+      globalSocket = io(socketUrl, {
+        transports: ["websocket", "polling"],
         withCredentials: false,
       });
     }
