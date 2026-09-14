@@ -27,7 +27,7 @@ function verifyToken(req, res, next) {
 
   const token = authHeader.slice(7);
   try {
-    const decoded = jwt.verify(token, jwtAccessSecret);
+    const decoded = jwt.verify(token, jwtAccessSecret); // returns the decoded payload inside the JWT if the token is valid ({id, email, role, iat, exp})
     req.user = decoded; // { id, email, role, iat, exp }
     next();
   } catch (err) {

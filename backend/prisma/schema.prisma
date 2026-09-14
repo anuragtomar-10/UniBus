@@ -109,9 +109,9 @@ model BaseScheduleTrip {
   driver        Driver      @relation(fields: [driverId], references: [id])
   isActive      Boolean     @default(true)
 
-  // Prevent same bus/driver being assigned twice on same day in the base template
-  @@unique([dayOfWeek, busId])
-  @@unique([dayOfWeek, driverId])
+  // Prevent same bus/driver being assigned twice on same day at the same time in the base template
+  @@unique([dayOfWeek, busId, departureTime])
+  @@unique([dayOfWeek, driverId, departureTime])
 }
 
 // Trip: actual bookable trips generated from the base template (source: BASE)

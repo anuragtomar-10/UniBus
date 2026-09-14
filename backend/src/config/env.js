@@ -3,7 +3,7 @@
  * Fail fast on startup if required vars are missing — better than a cryptic runtime error later.
  */
 
-require("dotenv").config();
+require("dotenv").config(); // loads variables from .env into process.env
 
 const required = [
   "DATABASE_URL",

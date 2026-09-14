@@ -54,6 +54,8 @@ async function logout(req, res, next) {
     const { refreshToken } = req.body;
     if (refreshToken) {
       await authService.logout(refreshToken);
+      // shouldn't i clear refreshToken from cookie also?
+      // refreshToken is completely discarded by our frontend. So our system is just using accessToken
     }
     res.json({ message: "Logged out" });
   } catch (err) {

@@ -16,7 +16,7 @@ const bookingRoutes = require("./modules/booking/booking.routes");
 const auditRoutes = require("./modules/audit/audit.routes");
 const analyticsRoutes = require("./modules/analytics/analytics.routes");
 
-const app = express();
+const app = express(); // Express Application Instance : used to define REST routes, middlewares, etc.
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(
@@ -25,7 +25,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json()); // Built-in middleware to parse incoming JSON requests; converts JSON to JS object and puts it into req.body
 
 const apiRouter = express.Router();
 apiRouter.use("/auth", authRoutes);

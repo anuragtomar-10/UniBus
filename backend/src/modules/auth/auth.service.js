@@ -133,7 +133,7 @@ async function getMe(userId) {
 async function refreshAccessToken(token) {
   const record = await prisma.refreshToken.findUnique({
     where: { token },
-    include: { user: true },
+    include: { user: true }, // 
   });
 
   if (!record || record.revoked || record.expiresAt < new Date()) {
