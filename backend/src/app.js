@@ -38,6 +38,9 @@ apiRouter.use("/admin/analytics", analyticsRoutes);
 app.use("/api", apiRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
+app.get("/", (_req, res) =>
+  res.json({ message: "UniBus API server is running", healthCheck: "/health" })
+);
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // ─── Global error handler ─────────────────────────────────────────────────────
